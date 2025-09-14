@@ -2,7 +2,7 @@
 
 A command-line tool to convert Google Keep notes to Bear app markdown format.
 
-## � AI-Generated Code Warning
+## ❗️❗️❗️ AI-Generated Code Warning ❗️❗️❗️
 
 **This project was completely written by AI and has not been reviewed by humans.** Use at your own risk. The code may contain bugs, security vulnerabilities, or other issues. Please thoroughly review and test before using with important data.
 

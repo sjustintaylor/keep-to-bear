@@ -9,6 +9,7 @@ import { KeepNote } from "./types";
 export class KeepToBearConverter {
   private inputDir: string;
   private outputDir: string;
+  private validLabels: Set<string> = new Set();
 
   constructor(inputDir: string, outputDir: string) {
     this.inputDir = inputDir;
@@ -17,6 +18,9 @@ export class KeepToBearConverter {
 
   async convert(): Promise<void> {
     console.log("Starting Google Keep to Bear conversion...");
+
+    // Load valid labels from Labels.txt
+    await this.loadValidLabels();
 
     // Ensure output directory exists
     await fs.ensureDir(this.outputDir);
@@ -43,6 +47,28 @@ export class KeepToBearConverter {
       `Conversion complete! Converted ${converted} out of ${jsonFiles.length} notes.`
     );
     console.log(`Output directory: ${this.outputDir}`);
+  }
+
+  private async loadValidLabels(): Promise<void> {
+    const labelsFilePath = path.join(process.cwd(), "Labels.txt");
+
+    if (await fs.pathExists(labelsFilePath)) {
+      const content = await fs.readFile(labelsFilePath, "utf8");
+      const lines = content.split("\n");
+
+      for (const line of lines) {
+        const match = line.match(/^\s*\d+→(.+)$/);
+        if (match && match[1].trim()) {
+          this.validLabels.add(match[1].trim());
+        }
+      }
+
+      console.log(
+        `Loaded ${this.validLabels.size} valid labels from Labels.txt`
+      );
+    } else {
+      console.warn("Labels.txt not found, no hashtags will be escaped");
+    }
   }
 
   private async findFiles(dir: string, extension: string): Promise<string[]> {
@@ -115,27 +141,54 @@ export class KeepToBearConverter {
     return this.htmlToMarkdown(bodyContent);
   }
 
+  private escapeInvalidHashtags(content: string): string {
+    // Find all hashtags in the content (word boundaries, alphanumeric + hyphens/underscores)
+    return content.replace(/#[\w-]+/g, (match) => {
+      const hashtag = match.slice(1); // Remove the # symbol
+
+      // Check if this hashtag corresponds to any valid label
+      const isValidLabel = Array.from(this.validLabels).some((label) => {
+        // Convert label to potential hashtag format (lowercase, spaces to hyphens)
+        const labelAsHashtag = label
+          .replace(/[^a-zA-Z0-9\s-]/g, "") // Remove special chars except spaces and hyphens
+          .replace(/\s+/g, "-") // Replace spaces (including multiple) with single hyphens
+          .replace(/-+/g, "-") // Collapse multiple hyphens into single hyphen
+          .toLowerCase();
+
+        return labelAsHashtag === hashtag.toLowerCase();
+      });
+
+      // If it's not a valid label, escape the hashtag
+      return isValidLabel ? match : `\\${match}`;
+    });
+  }
+
   private htmlToMarkdown(htmlContent: string): string {
     // Configure Turndown service
     const turndownService = new TurndownService({
-      headingStyle: 'atx',
-      bulletListMarker: '-',
-      codeBlockStyle: 'fenced'
+      headingStyle: "atx",
+      bulletListMarker: "-",
+      codeBlockStyle: "fenced",
     });
 
     // Remove style and script tags completely
-    turndownService.remove(['style', 'script']);
+    turndownService.remove(["style", "script"]);
 
     // Convert HTML to Markdown
-    return turndownService.turndown(htmlContent).trim();
+    const markdown = turndownService.turndown(htmlContent).trim();
+
+    // Escape hashtags that don't correspond to valid labels
+    return this.escapeInvalidHashtags(markdown);
   }
 
   private generateDisplayTitle(jsonData: KeepNote): string {
     // Extract creation date from timestamp
     let datePrefix = "Unknown Date";
     if (jsonData.createdTimestampUsec) {
-      const createdDate = new Date(parseInt(jsonData.createdTimestampUsec) / 1000);
-      datePrefix = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const createdDate = new Date(
+        parseInt(jsonData.createdTimestampUsec) / 1000
+      );
+      datePrefix = createdDate.toISOString().split("T")[0]; // YYYY-MM-DD format
     }
 
     // If note has a title, combine with date
@@ -145,9 +198,11 @@ export class KeepToBearConverter {
 
     // If no title, add time component for uniqueness (HH.MM format)
     if (jsonData.createdTimestampUsec) {
-      const createdDate = new Date(parseInt(jsonData.createdTimestampUsec) / 1000);
-      const hours = createdDate.getHours().toString().padStart(2, '0');
-      const minutes = createdDate.getMinutes().toString().padStart(2, '0');
+      const createdDate = new Date(
+        parseInt(jsonData.createdTimestampUsec) / 1000
+      );
+      const hours = createdDate.getHours().toString().padStart(2, "0");
+      const minutes = createdDate.getMinutes().toString().padStart(2, "0");
       return `${datePrefix}.${hours}.${minutes}`;
     }
 
@@ -171,7 +226,7 @@ export class KeepToBearConverter {
         .filter((name): name is string => Boolean(name && name.trim()))
         .map((name) => {
           // First replace any existing "/" with " & " to avoid nesting conflicts
-          let processedName = name.replace(/\//g, " & ");
+          let processedName = name.replace(/\//g, " and ");
           // Then handle " - " (dash with spaces) by converting to "/" for nesting
           processedName = processedName.replace(/ - /g, "/");
           // Finally replace spaces with hyphens and make lowercase
@@ -193,7 +248,8 @@ export class KeepToBearConverter {
 
     // Always add title with date prefix
     const displayTitle = this.generateDisplayTitle(jsonData);
-    markdown += `# ${displayTitle}\n\n`;
+    const escapedTitle = this.escapeInvalidHashtags(displayTitle);
+    markdown += `# ${escapedTitle}\n\n`;
 
     // Add content
     if (content && content.trim()) {

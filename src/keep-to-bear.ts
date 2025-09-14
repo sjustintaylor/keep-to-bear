@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 
-const fs = require("fs-extra");
-const path = require("path");
-const cheerio = require("cheerio");
+import * as fs from "fs-extra";
+import * as path from "path";
+import * as cheerio from "cheerio";
+import { KeepNote } from "./types";
 
-class KeepToBearConverter {
-  constructor(inputDir, outputDir) {
+export class KeepToBearConverter {
+  private inputDir: string;
+  private outputDir: string;
+
+  constructor(inputDir: string, outputDir: string) {
     this.inputDir = inputDir;
     this.outputDir = outputDir;
   }
 
-  async convert() {
+  async convert(): Promise<void> {
     console.log("Starting Google Keep to Bear conversion...");
 
     // Ensure output directory exists
@@ -27,7 +31,10 @@ class KeepToBearConverter {
         converted++;
         console.log(`Converted: ${path.basename(jsonFile, ".json")}`);
       } catch (error) {
-        console.error(`Error converting ${jsonFile}:`, error.message);
+        console.error(
+          `Error converting ${jsonFile}:`,
+          (error as Error).message
+        );
       }
     }
 
@@ -37,8 +44,8 @@ class KeepToBearConverter {
     console.log(`Output directory: ${this.outputDir}`);
   }
 
-  async findFiles(dir, extension) {
-    const files = [];
+  private async findFiles(dir: string, extension: string): Promise<string[]> {
+    const files: string[] = [];
     const items = await fs.readdir(dir);
 
     for (const item of items) {
@@ -56,7 +63,7 @@ class KeepToBearConverter {
     return files;
   }
 
-  async convertNote(jsonFilePath) {
+  private async convertNote(jsonFilePath: string): Promise<void> {
     // Read JSON metadata
     const jsonData = await this.parseJsonFile(jsonFilePath);
 
@@ -90,12 +97,12 @@ class KeepToBearConverter {
     await fs.writeFile(outputPath, markdown, "utf8");
   }
 
-  async parseJsonFile(filePath) {
+  private async parseJsonFile(filePath: string): Promise<KeepNote> {
     const content = await fs.readFile(filePath, "utf8");
-    return JSON.parse(content);
+    return JSON.parse(content) as KeepNote;
   }
 
-  async parseHtmlFile(filePath) {
+  private async parseHtmlFile(filePath: string): Promise<string> {
     const content = await fs.readFile(filePath, "utf8");
     const $ = cheerio.load(content);
 
@@ -103,7 +110,7 @@ class KeepToBearConverter {
     return this.htmlToMarkdown($);
   }
 
-  htmlToMarkdown($) {
+  private htmlToMarkdown($: cheerio.CheerioAPI): string {
     // Remove unwanted elements
     $("style, script").remove();
 
@@ -112,59 +119,59 @@ class KeepToBearConverter {
     // Process the body content
     $("body")
       .contents()
-      .each((i, elem) => {
-        const $elem = $(elem);
+      .each((_i, element) => {
+        const $element = $(element);
 
-        if (elem.type === "text") {
-          markdown += $elem.text().trim();
-        } else if (elem.tagName) {
-          switch (elem.tagName.toLowerCase()) {
+        if (element.type === "text") {
+          markdown += $element.text().trim();
+        } else if (element.type === "tag") {
+          switch (element.tagName?.toLowerCase()) {
             case "h1":
             case "h2":
             case "h3":
             case "h4":
             case "h5":
             case "h6":
-              const level = parseInt(elem.tagName.substring(1));
+              const level = parseInt(element.tagName.substring(1));
               markdown +=
-                "#".repeat(level) + " " + $elem.text().trim() + "\n\n";
+                "#".repeat(level) + " " + $element.text().trim() + "\n\n";
               break;
             case "p":
-              markdown += $elem.text().trim() + "\n\n";
+              markdown += $element.text().trim() + "\n\n";
               break;
             case "br":
               markdown += "\n";
               break;
             case "ul":
             case "ol":
-              markdown += this.processList($elem, elem.tagName === "ol") + "\n";
+              markdown +=
+                this.processList($element, element.tagName === "ol") + "\n";
               break;
             case "a":
-              const href = $elem.attr("href");
-              const text = $elem.text().trim();
+              const href = $element.attr("href");
+              const text = $element.text().trim();
               markdown += href ? `[${text}](${href})` : text;
               break;
             case "strong":
             case "b":
-              markdown += `**${$elem.text().trim()}**`;
+              markdown += `**${$element.text().trim()}**`;
               break;
             case "em":
             case "i":
-              markdown += `*${$elem.text().trim()}*`;
+              markdown += `*${$element.text().trim()}*`;
               break;
             case "img":
-              const src = $elem.attr("src");
-              const alt = $elem.attr("alt") || "Image";
+              const src = $element.attr("src");
               if (src) {
                 const filename = path.basename(src);
                 markdown += `![](${filename})`;
               }
               break;
             case "div":
-              markdown += $elem.text().trim() + "\n";
+              markdown += $element.text().trim() + "\n";
               break;
             default:
-              markdown += $elem.text().trim();
+              markdown += $element.text().trim();
           }
         }
       });
@@ -172,33 +179,64 @@ class KeepToBearConverter {
     return markdown.replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  processList($list, isOrdered = false) {
+  private processList($list: cheerio.Cheerio<any>, isOrdered = false): string {
     let result = "";
     $list.children("li").each((i, li) => {
-      const $li = $(li);
+      const text = cheerio.load(li).text().trim();
       const prefix = isOrdered ? `${i + 1}. ` : "- ";
-      result += prefix + $li.text().trim() + "\n";
+      result += prefix + text + "\n";
     });
     return result;
   }
 
-  generateMarkdown(jsonData, content, copiedAttachments = []) {
+  private generateDisplayTitle(jsonData: KeepNote): string {
+    // Extract creation date from timestamp
+    let datePrefix = "Unknown Date";
+    if (jsonData.createdTimestampUsec) {
+      const createdDate = new Date(parseInt(jsonData.createdTimestampUsec) / 1000);
+      datePrefix = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    }
+
+    // If note has a title, combine with date
+    if (jsonData.title && jsonData.title.trim()) {
+      return `${datePrefix} - ${jsonData.title.trim()}`;
+    }
+
+    // If no title, add time component for uniqueness (HH.MM format)
+    if (jsonData.createdTimestampUsec) {
+      const createdDate = new Date(parseInt(jsonData.createdTimestampUsec) / 1000);
+      const hours = createdDate.getHours().toString().padStart(2, '0');
+      const minutes = createdDate.getMinutes().toString().padStart(2, '0');
+      return `${datePrefix}.${hours}.${minutes}`;
+    }
+
+    return datePrefix;
+  }
+
+  private generateMarkdown(
+    jsonData: KeepNote,
+    content: string,
+    copiedAttachments: string[] = []
+  ): string {
     let markdown = "";
 
     // Add YAML frontmatter for tags
+    const tagPrefix = "06-google-keep/";
     let yamlTags = ["06-google-keep"];
 
     if (jsonData.labels && jsonData.labels.length > 0) {
       const labelTags = jsonData.labels
         .map((label) => label.name)
-        .filter((name) => name && name.trim())
+        .filter((name): name is string => Boolean(name && name.trim()))
         .map((name) => {
           // First replace any existing "/" with " & " to avoid nesting conflicts
           let processedName = name.replace(/\//g, " & ");
           // Then handle " - " (dash with spaces) by converting to "/" for nesting
           processedName = processedName.replace(/ - /g, "/");
           // Finally replace spaces with hyphens and make lowercase
-          return processedName.replace(/\s+/g, "-").toLowerCase();
+          return tagPrefix.concat(
+            processedName.replace(/\s+/g, "-").toLowerCase()
+          );
         });
 
       yamlTags.push(...labelTags);
@@ -212,10 +250,9 @@ class KeepToBearConverter {
     }
     markdown += "---\n\n";
 
-    // Add title if available
-    if (jsonData.title && jsonData.title.trim()) {
-      markdown += `# ${jsonData.title.trim()}\n\n`;
-    }
+    // Always add title with date prefix
+    const displayTitle = this.generateDisplayTitle(jsonData);
+    markdown += `# ${displayTitle}\n\n`;
 
     // Add content
     if (content && content.trim()) {
@@ -246,7 +283,7 @@ class KeepToBearConverter {
     return markdown.trim();
   }
 
-  generateFileName(jsonData) {
+  private generateFileName(jsonData: KeepNote): string {
     let fileName = "";
 
     // Use title if available, otherwise use timestamp
@@ -268,8 +305,11 @@ class KeepToBearConverter {
     return `${fileName}.md`;
   }
 
-  async copyAttachments(jsonFilePath, jsonData) {
-    const copiedFiles = [];
+  private async copyAttachments(
+    jsonFilePath: string,
+    jsonData: KeepNote
+  ): Promise<string[]> {
+    const copiedFiles: string[] = [];
 
     if (!jsonData.attachments || jsonData.attachments.length === 0) {
       return copiedFiles;
@@ -297,7 +337,7 @@ class KeepToBearConverter {
 }
 
 // CLI interface
-function main() {
+function main(): void {
   const args = process.argv.slice(2);
 
   if (args.length < 2) {
@@ -320,7 +360,7 @@ function main() {
   }
 
   const converter = new KeepToBearConverter(inputDir, outputDir);
-  converter.convert().catch((error) => {
+  converter.convert().catch((error: Error) => {
     console.error("Conversion failed:", error);
     process.exit(1);
   });
@@ -330,4 +370,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = KeepToBearConverter;
+export default KeepToBearConverter;

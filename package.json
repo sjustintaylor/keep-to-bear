@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/keep-to-bear.js",
-    "dev": "tsx src/keep-to-bear.ts ./input ./output",
+    "dev": "tsx src/keep-to-bear.ts ./in ./out",
     "clean": "rm -rf dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,12 +18,14 @@
   "description": "",
   "dependencies": {
     "cheerio": "^1.1.2",
-    "fs-extra": "^11.3.1"
+    "fs-extra": "^11.3.1",
+    "turndown": "^7.2.1"
   },
   "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67",
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^24.3.3",
+    "@types/turndown": "^5.0.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }

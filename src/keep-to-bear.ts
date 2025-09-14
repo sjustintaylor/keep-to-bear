@@ -3,6 +3,7 @@
 import * as fs from "fs-extra";
 import * as path from "path";
 import * as cheerio from "cheerio";
+import TurndownService from "turndown";
 import { KeepNote } from "./types";
 
 export class KeepToBearConverter {
@@ -106,87 +107,27 @@ export class KeepToBearConverter {
     const content = await fs.readFile(filePath, "utf8");
     const $ = cheerio.load(content);
 
-    // Extract text content and convert basic HTML to markdown
-    return this.htmlToMarkdown($);
-  }
-
-  private htmlToMarkdown($: cheerio.CheerioAPI): string {
     // Remove unwanted elements
     $("style, script").remove();
 
-    let markdown = "";
-
-    // Process the body content
-    $("body")
-      .contents()
-      .each((_i, element) => {
-        const $element = $(element);
-
-        if (element.type === "text") {
-          markdown += $element.text().trim();
-        } else if (element.type === "tag") {
-          switch (element.tagName?.toLowerCase()) {
-            case "h1":
-            case "h2":
-            case "h3":
-            case "h4":
-            case "h5":
-            case "h6":
-              const level = parseInt(element.tagName.substring(1));
-              markdown +=
-                "#".repeat(level) + " " + $element.text().trim() + "\n\n";
-              break;
-            case "p":
-              markdown += $element.text().trim() + "\n\n";
-              break;
-            case "br":
-              markdown += "\n";
-              break;
-            case "ul":
-            case "ol":
-              markdown +=
-                this.processList($element, element.tagName === "ol") + "\n";
-              break;
-            case "a":
-              const href = $element.attr("href");
-              const text = $element.text().trim();
-              markdown += href ? `[${text}](${href})` : text;
-              break;
-            case "strong":
-            case "b":
-              markdown += `**${$element.text().trim()}**`;
-              break;
-            case "em":
-            case "i":
-              markdown += `*${$element.text().trim()}*`;
-              break;
-            case "img":
-              const src = $element.attr("src");
-              if (src) {
-                const filename = path.basename(src);
-                markdown += `![](${filename})`;
-              }
-              break;
-            case "div":
-              markdown += $element.text().trim() + "\n";
-              break;
-            default:
-              markdown += $element.text().trim();
-          }
-        }
-      });
-
-    return markdown.replace(/\n{3,}/g, "\n\n").trim();
+    // Get just the body content for conversion
+    const bodyContent = $("body").html() || "";
+    return this.htmlToMarkdown(bodyContent);
   }
 
-  private processList($list: cheerio.Cheerio<any>, isOrdered = false): string {
-    let result = "";
-    $list.children("li").each((i, li) => {
-      const text = cheerio.load(li).text().trim();
-      const prefix = isOrdered ? `${i + 1}. ` : "- ";
-      result += prefix + text + "\n";
+  private htmlToMarkdown(htmlContent: string): string {
+    // Configure Turndown service
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced'
     });
-    return result;
+
+    // Remove style and script tags completely
+    turndownService.remove(['style', 'script']);
+
+    // Convert HTML to Markdown
+    return turndownService.turndown(htmlContent).trim();
   }
 
   private generateDisplayTitle(jsonData: KeepNote): string {

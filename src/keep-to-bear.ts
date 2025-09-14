@@ -181,6 +181,29 @@ export class KeepToBearConverter {
     return this.escapeInvalidHashtags(markdown);
   }
 
+  private generateHashtags(jsonData: KeepNote): string[] {
+    const hashtags = ["#06-google-keep"];
+
+    if (jsonData.labels && jsonData.labels.length > 0) {
+      const labelHashtags = jsonData.labels
+        .map((label) => label.name)
+        .filter((name): name is string => Boolean(name && name.trim()))
+        .map((name) => {
+          // First replace any existing "/" with " and " to avoid nesting conflicts
+          let processedName = name.replace(/\//g, " and ");
+          // Then handle " - " (dash with spaces) by converting to "-" for hashtags
+          processedName = processedName.replace(/ - /g, "-");
+          // Finally replace spaces with hyphens and make lowercase
+          const hashtagName = processedName.replace(/\s+/g, "-").toLowerCase();
+          return `#${hashtagName}`;
+        });
+
+      hashtags.push(...labelHashtags);
+    }
+
+    return hashtags;
+  }
+
   private generateDisplayTitle(jsonData: KeepNote): string {
     // Extract creation date from timestamp
     let datePrefix = "Unknown Date";
@@ -216,40 +239,16 @@ export class KeepToBearConverter {
   ): string {
     let markdown = "";
 
-    // Add YAML frontmatter for tags
-    const tagPrefix = "06-google-keep/";
-    let yamlTags = ["06-google-keep"];
-
-    if (jsonData.labels && jsonData.labels.length > 0) {
-      const labelTags = jsonData.labels
-        .map((label) => label.name)
-        .filter((name): name is string => Boolean(name && name.trim()))
-        .map((name) => {
-          // First replace any existing "/" with " & " to avoid nesting conflicts
-          let processedName = name.replace(/\//g, " and ");
-          // Then handle " - " (dash with spaces) by converting to "/" for nesting
-          processedName = processedName.replace(/ - /g, "/");
-          // Finally replace spaces with hyphens and make lowercase
-          return tagPrefix.concat(
-            processedName.replace(/\s+/g, "-").toLowerCase()
-          );
-        });
-
-      yamlTags.push(...labelTags);
-    }
-
-    // Generate YAML frontmatter
-    markdown += "---\n";
-    markdown += "tags:\n";
-    for (const tag of yamlTags) {
-      markdown += `  - ${tag}\n`;
-    }
-    markdown += "---\n\n";
-
     // Always add title with date prefix
     const displayTitle = this.generateDisplayTitle(jsonData);
     const escapedTitle = this.escapeInvalidHashtags(displayTitle);
     markdown += `# ${escapedTitle}\n\n`;
+
+    // Add hashtags under the title
+    const hashtags = this.generateHashtags(jsonData);
+    if (hashtags.length > 0) {
+      markdown += `${hashtags.join(" ")}\n\n`;
+    }
 
     // Add content
     if (content && content.trim()) {

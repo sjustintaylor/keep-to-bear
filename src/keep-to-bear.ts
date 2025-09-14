@@ -30,22 +30,32 @@ export class KeepToBearConverter {
     console.log(`Found ${jsonFiles.length} notes to convert`);
 
     let converted = 0;
-    for (const jsonFile of jsonFiles) {
+    for (let i = 0; i < jsonFiles.length; i++) {
+      const jsonFile = jsonFiles[i];
       try {
+        console.log(`Processing (${i + 1}/${jsonFiles.length}): ${path.basename(jsonFile, ".json")}`);
         await this.convertNote(jsonFile);
         converted++;
-        console.log(`Converted: ${path.basename(jsonFile, ".json")}`);
+        console.log(`✓ Converted (${converted}/${jsonFiles.length}): ${path.basename(jsonFile, ".json")}`);
       } catch (error) {
         console.error(
-          `Error converting ${jsonFile}:`,
+          `✗ Error converting (${i + 1}/${jsonFiles.length}) ${jsonFile}:`,
           (error as Error).message
         );
       }
     }
 
+    const failed = jsonFiles.length - converted;
+    const successRate = jsonFiles.length > 0 ? Math.round((converted / jsonFiles.length) * 100) : 0;
+
     console.log(
-      `Conversion complete! Converted ${converted} out of ${jsonFiles.length} notes.`
+      `Conversion complete! Converted ${converted} out of ${jsonFiles.length} notes (${successRate}% success rate).`
     );
+
+    if (failed > 0) {
+      console.log(`Failed to convert ${failed} notes.`);
+    }
+
     console.log(`Output directory: ${this.outputDir}`);
   }
 

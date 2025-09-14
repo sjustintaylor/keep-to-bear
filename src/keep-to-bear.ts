@@ -191,11 +191,11 @@ export class KeepToBearConverter {
         .map((name) => {
           // First replace any existing "/" with " and " to avoid nesting conflicts
           let processedName = name.replace(/\//g, " and ");
-          // Then handle " - " (dash with spaces) by converting to "-" for hashtags
-          processedName = processedName.replace(/ - /g, "-");
+          // Then handle " - " (dash with spaces) by converting to "" for nested hashtags in bear
+          processedName = processedName.replace(/ - /g, "/");
           // Finally replace spaces with hyphens and make lowercase
           const hashtagName = processedName.replace(/\s+/g, "-").toLowerCase();
-          return `#${hashtagName}`;
+          return `#06-google-keep/${hashtagName}`;
         });
 
       hashtags.push(...labelHashtags);
@@ -242,12 +242,12 @@ export class KeepToBearConverter {
     // Always add title with date prefix
     const displayTitle = this.generateDisplayTitle(jsonData);
     const escapedTitle = this.escapeInvalidHashtags(displayTitle);
-    markdown += `# ${escapedTitle}\n\n`;
+    markdown += `# ${escapedTitle}\n`;
 
     // Add hashtags under the title
     const hashtags = this.generateHashtags(jsonData);
     if (hashtags.length > 0) {
-      markdown += `${hashtags.join(" ")}\n\n`;
+      markdown += `${hashtags.join(" ")}\n___\n`;
     }
 
     // Add content

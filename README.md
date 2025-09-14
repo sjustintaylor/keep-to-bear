@@ -54,10 +54,7 @@ pnpm start ./Takeout/Keep ./bear-notes
 ```
 
 ### Development Mode
-
-```bash
-pnpm run dev
-```
+We don't do that here, this was tested in prod.
 
 ### Optional: Label Validation
 
